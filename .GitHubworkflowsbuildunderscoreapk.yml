@@ -1,0 +1,19 @@
+name: Build HTML to APK
+​on:
+workflow_dispatch:
+inputs:
+chat_id:
+description: 'Telegram Chat ID'
+required: true
+app_name:
+description: 'Application Name'
+required: true
+package_id:
+description: 'Package ID'
+required: true
+​jobs:
+build:
+runs-on: ubuntu-latest
+steps:
+- name: Checkoutcode
+uses: actions/checkout@v4
