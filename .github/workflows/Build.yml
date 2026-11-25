@@ -25,6 +25,8 @@ jobs:
           java-version: '17'
 
       - name: Setup Android SDK
+      with:
+accept-sdk-licenses: true
         uses: android-actions/setup-android@v3
 
       - name: Prepare Web Assets and Capacitor Project
