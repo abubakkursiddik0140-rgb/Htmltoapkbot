@@ -1,4 +1,4 @@
-name: Build Android APK
+ name: Build Android APK
 
 on:
   push:
@@ -25,9 +25,9 @@ jobs:
           java-version: '17'
 
       - name: Setup Android SDK
-      with:
-accept-sdk-licenses: true
         uses: android-actions/setup-android@v3
+        with:
+          accept-sdk-licenses: true
 
       - name: Prepare Web Assets and Capacitor Project
         run: |
@@ -36,9 +36,16 @@ accept-sdk-licenses: true
           cp *.css web_assets/ || true
           cp *.js web_assets/ || true
           cp *.json web_assets/ || true
-          
+          cp -r assets web_assets/ || true
+          cp -r images web_assets/ || true
+
+          if [ ! -f web_assets/index.html ]; then
+            echo "Error: index.html not found in repository root"
+            exit 1
+          fi
+
           npm init -y
-          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
           npx cap init "My New Shop" "com.mynewshop.app" --web-dir="web_assets"
           npx cap add android
           npx cap sync android
@@ -54,3 +61,4 @@ accept-sdk-licenses: true
         with:
           name: app-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
