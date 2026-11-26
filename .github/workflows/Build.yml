@@ -81,7 +81,7 @@ jobs:
           [ -z "$APP_NAME" ] && APP_NAME="My New Shop"
           npm init -y
           npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
-          npx cap init "$APP_NAME" "com.mynewshop.app" --web-dir="web_assets"
+          npx cap init "$APP_NAME" "com.myname.shopname" --web-dir="web_assets"
           npx cap add android
 
       - name: Generate App Icon and Splash from your images
