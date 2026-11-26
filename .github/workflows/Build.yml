@@ -4,6 +4,15 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      main_html:
+        description: 'মূল HTML ফাইলের নাম (যেমন shop.html)'
+        required: false
+        default: ''
+      app_name:
+        description: 'অ্যাপের নাম (খালি রাখলে My New Shop)'
+        required: false
+        default: ''
 
 jobs:
   build:
@@ -29,25 +38,90 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Prepare Web Assets and Capacitor Project
+      - name: Prepare Web Assets
+        env:
+          MAIN_HTML: ${{ github.event.inputs.main_html }}
         run: |
           mkdir -p web_assets
-          cp *.html web_assets/ || true
-          cp *.css web_assets/ || true
-          cp *.js web_assets/ || true
-          cp -r assets web_assets/ || true
-          cp -r images web_assets/ || true
 
-          if [ ! -f web_assets/index.html ]; then
-            echo "Error: index.html not found in repository root"
+          rsync -a \
+            --exclude='.git' --exclude='.github' \
+            --exclude='node_modules' --exclude='android' \
+            --exclude='web_assets' --exclude='resources' \
+            --exclude='package.json' --exclude='package-lock.json' \
+            --exclude='capacitor.config.*' --exclude='*.md' \
+            ./ web_assets/
+
+          if [ -n "$MAIN_HTML" ] && [ -f "web_assets/$MAIN_HTML" ]; then
+            [ "$MAIN_HTML" != "index.html" ] && cp "web_assets/$MAIN_HTML" web_assets/index.html
+            echo "মূল পেজ: $MAIN_HTML"
+          elif [ -n "$MAIN_HTML" ]; then
+            echo "Error: $MAIN_HTML নামে ফাইল পাওয়া যায়নি"
             exit 1
+          elif [ -f web_assets/index.html ]; then
+            echo "index.html ব্যবহার করা হচ্ছে"
+          else
+            LATEST_HTML=$(ls -t web_assets/*.html 2>/dev/null | head -n 1)
+            if [ -z "$LATEST_HTML" ]; then
+              echo "Error: কোনো .html ফাইল পাওয়া যায়নি"
+              exit 1
+            fi
+            echo "নাম দেওয়া হয়নি, ব্যবহার করা হচ্ছে: $LATEST_HTML"
+            cp "$LATEST_HTML" web_assets/index.html
           fi
 
+          echo "=== web_assets এর ভেতরের ফাইল ==="
+          ls -R web_assets | head -n 80
+
+      - name: Prepare Capacitor Project
+        env:
+          APP_NAME_INPUT: ${{ github.event.inputs.app_name }}
+        run: |
+          APP_NAME="$APP_NAME_INPUT"
+          [ -z "$APP_NAME" ] && APP_NAME="My New Shop"
           npm init -y
           npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
-          npx cap init "My New Shop" "com.mynewshop.app" --web-dir="web_assets"
+          npx cap init "$APP_NAME" "com.mynewshop.app" --web-dir="web_assets"
           npx cap add android
-          npx cap sync android
+
+      - name: Generate App Icon and Splash from your images
+        run: |
+          mkdir -p resources
+
+          LOGO=$(find . -maxdepth 2 -type f \( -iname 'logo.png' -o -iname 'logo.jpg' -o -iname 'logo.jpeg' -o -iname 'icon.png' -o -iname 'icon.jpg' \) \
+                  -not -path './node_modules/*' -not -path './android/*' -not -path './web_assets/*' | head -n 1)
+
+          BG=$(find . -maxdepth 2 -type f \( -iname 'background.png' -o -iname 'background.jpg' -o -iname 'background.jpeg' -o -iname 'splash.png' -o -iname 'splash.jpg' -o -iname 'bg.png' -o -iname 'bg.jpg' \) \
+                  -not -path './node_modules/*' -not -path './android/*' -not -path './web_assets/*' | head -n 1)
+
+          if [ -n "$LOGO" ]; then
+            echo "লোগো পাওয়া গেছে: $LOGO"
+            EXT="${LOGO##*.}"
+            cp "$LOGO" "resources/icon-only.$EXT"
+            cp "$LOGO" "resources/icon-foreground.$EXT"
+          else
+            echo "লোগো পাওয়া যায়নি, ডিফল্ট আইকন থাকবে"
+          fi
+
+          if [ -n "$BG" ]; then
+            echo "ব্যাকগ্রাউন্ড পাওয়া গেছে: $BG"
+            EXT="${BG##*.}"
+            cp "$BG" "resources/splash.$EXT"
+            cp "$BG" "resources/splash-dark.$EXT"
+          fi
+
+          if [ -n "$LOGO" ] || [ -n "$BG" ]; then
+            npm install @capacitor/assets --save-dev
+            npx capacitor-assets generate --android \
+              --assetPath resources \
+              --iconBackgroundColor '#ffffff' \
+              --iconBackgroundColorDark '#ffffff' \
+              --splashBackgroundColor '#ffffff' \
+              --splashBackgroundColorDark '#ffffff'
+          fi
+
+      - name: Sync Capacitor
+        run: npx cap sync android
 
       - name: Build Debug APK
         run: |
